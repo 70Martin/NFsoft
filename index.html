@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFsoft</title> 
+
+    <!-- Odkaz na manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #fff;
+            color: #000;
+            margin: 20px;
+            transition: all 0.3s ease;
+        }
+        .dark-mode {
+            background-color: #333;
+            color: #fff;
+        }
+        .blue-theme {
+            background-color: #E3F2FD;
+            color: #1E88E5;
+        }
+        .transcription, .numbers {
+            padding: 10px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .numbers {
+            background-color: #f0f0f0;
+        }
+        button {
+            padding: 8px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 10px;
+            border-radius: 12px;
+            border: none;
+            background-color: #1E88E5;
+            color: white;
+        }
+        button:hover {
+            background-color: #1565C0;
+        }
+        .number-item {
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .number-item input {
+            width: 40px;
+            text-align: center;
+        }
+        .dark-mode .transcription, .dark-mode .numbers {
+            color: #fff;
+            background-color: #444;
+        }
+        .dark-mode .number-item input {
+            color: #fff;
+            background-color: #666;
+        }
+        #themeButton, #saveTextButton, #saveCSVButton {
+            margin-top: 20px;
+        }
+        #fileInput {
+            margin-top: 15px; /* Posunutí tlačítka pro načtení souboru */
+        }
+        img {
+            max-width: 150px;
+            height: auto;
+        }
+        #logoSizeInput {
+            margin-top: 10px;
+        }
+        #navodIcon {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #333;
+            color: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        #navodContainer {
+            display: none;
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            max-width: 300px;
+            max-height: 400px; /* Přidání maximální výšky pro posuvník */
+            overflow-y: auto; /* Přidání posuvníku */
+            padding: 15px;
+            background: #fff;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        .dark-mode #navodContainer {
+            background: #333;
+            color: #fff;
+            border-color: #444;
+        }
+        .blue-theme #navodContainer {
+            background: #E3F2FD;
+            color: #1E88E5;
+            border-color: #90CAF9;
+        }
+    </style>
+    <script>
+        let recognition;
+        let isRecording = false;
+        let fullText = "";
+        let numbersArray = [];
+
+        function startStopRecording() {
+            if (isRecording) {
+                recognition.stop();
+                isRecording = false;
+                document.getElementById("startStopButton").textContent = "Začít nahrávat";
+            } else {
+                recognition.start();
+                isRecording = true;
+                document.getElementById("startStopButton").textContent = "Zastavit nahrávání";
+            }
+        }
+
+        function initSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window)) {
+                alert("Váš prohlížeč nepodporuje tuto funkci.");
+                return;
+            }
+
+            recognition = new webkitSpeechRecognition();
+            recognition.lang = 'cs-CZ';
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                console.log("Nahrávání začalo.");
+            };
+
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    let transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        transcript = convertNumberWordsToDigits(transcript);
+                        finalTranscript += transcript + ' ';
+                        let numbers = transcript.match(/\d+(\.\d+)?/g);
+                        if (numbers) {
+                            numbers.forEach(number => {
+                                numbersArray.push(number);
+                            });
+                        }
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                fullText += finalTranscript;
+                document.getElementById("transcription").innerText = fullText + interimTranscript;
+                updateNumbers();
+            };
+
+            recognition.onerror = function(event) {
+                console.error("Chyba při rozpoznávání řeči: ", event.error);
+            };
+
+            recognition.onend = function() {
+                console.log("Nahrávání bylo ukončeno.");
+                if (isRecording) {
+                    recognition.start();
+                }
+            };
+        }
+
+        function convertNumberWordsToDigits(text) {
+            const numberWords = {
+                "jedna": "1", "dva": "2", "dvě": "2", "tři": "3", "čtyři": "4",
+                "pět": "5", "šest": "6", "sedm": "7", "osm": "8", "devět": "9", "deset": "10"
+            };
+            let result = text.split(" ").map(word => numberWords[word.toLowerCase()] || word).join(" ");
+            result = result.replace(/(\d+),(\d+)/g, "$1.$2");
+            return result.replace(/(\d+)\s(\d+)/g, "$1$2");
+        }
+
+        function changeTheme() {
+            let body = document.body;
+            if (body.classList.contains('dark-mode')) {
+                body.classList.remove('dark-mode');
+                body.classList.add('blue-theme');
+            } else if (body.classList.contains('blue-theme')) {
+                body.classList.remove('blue-theme');
+                body.classList.add('dark-mode');
+            } else {
+                body.classList.add('dark-mode');
+            }
+        }
+
+        function saveTextToFile() {
+            fullText = document.getElementById("transcription").innerText; // Update fullText with any changes made in the transcription div
+            const blob = new Blob([fullText], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'transcription.txt';
+            link.click();
+        }
+
+        function saveNumbersToCSV() {
+            const csvContent = "data:text/csv;charset=utf-8," + numbersArray.join(",") + "\n";
+            const link = document.createElement('a');
+            link.href = encodeURI(csvContent);
+            link.download = "numbers.csv";
+            link.click();
+        }
+
+        function updateNumbers() {
+            let numbersContainer = document.getElementById("numbers");
+            numbersContainer.innerHTML = '';
+
+            numbersArray.forEach((number, index) => {
+                let numberItem = document.createElement("div");
+                numberItem.classList.add("number-item");
+
+                let numberInput = document.createElement("input");
+                numberInput.type = "text";
+                numberInput.value = number;
+                numberInput.dataset.index = index;
+                numberInput.onchange = updateNumberValue;
+
+                numberItem.appendChild(numberInput);
+                numbersContainer.appendChild(numberItem);
+            });
+        }
+
+        function updateNumberValue(event) {
+            let index = event.target.dataset.index;
+            numbersArray[index] = event.target.value;
+        }
+
+        function loadFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    fullText = text;
+                    document.getElementById("transcription").innerText = fullText;
+
+                    const numbers = text.match(/\d+(\.\d+)?/g);
+                    if (numbers) {
+                        numbersArray = numbers;
+                        updateNumbers();
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function toggleNavod() {
+            const navodContainer = document.getElementById("navodContainer");
+            navodContainer.style.display = navodContainer.style.display === 'none' ? 'block' : 'none';
+        }
+
+        window.onload = function() {
+            initSpeechRecognition();
+        };
+
+        // Registrace Service Workeru
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(registration => {
+                    console.log('Service Worker registrován:', registration);
+                })
+                .catch(error => {
+                    console.log('Registrace Service Workeru selhala:', error);
+                });
+        }
+    </script>
+</head>
+<body>
+    <div style="text-align: center; margin-bottom: 20px;">
+        <img id="logo" src="nfsoft_logo.png" alt="Logo NFsoft" style="max-width: 85px; height: auto;">
+    </div>
+    
+    <h1>NFsoft</h1>
+    <button id="startStopButton" onclick="startStopRecording()">Začít nahrávat</button>
+
+    <h2>Textová transkripce</h2>
+    <div id="transcription" class="transcription" contenteditable="true"></div>
+
+    <h2>Detekovaná čísla</h2>
+    <div id="numbers" class="numbers"></div>
+
+    <button id="themeButton" onclick="changeTheme()">Změnit téma</button>
+    <button id="saveTextButton" onclick="saveTextToFile()">Uložit text</button>
+    <button id="saveCSVButton" onclick="saveNumbersToCSV()">Uložit čísla do CSV</button>
+
+    <input type="file" id="fileInput" onchange="loadFile(event)" />
+
+    <div id="navodIcon" onclick="toggleNavod()">ℹ️</div>
+    <div id="navodContainer">
+        <h3>Návod</h3>
+        <p><strong>1. Hlasová transkripce</strong><br>Převádí mluvené slovo na text v reálném čase pomocí Web Speech API.<br>Podporuje češtinu (cs-CZ).<br>Automaticky detekuje čísla v textu a ukládá je do samostatného pole.</p>
+        <p><strong>2. Zpracování čísel</strong><br>Rozpoznaná čísla se zobrazují ve speciální sekci.<br>Uživatel může čísla ručně upravovat přímo v políčkách.</p>
+        <p><strong>3. Tematické režimy</strong><br>Možnost přepínání mezi třemi režimy zobrazení:<br>Světlý režim (default).<br>Tmavý režim.<br>Modrý režim.</p>
+        <p><strong>4. Ukládání dat</strong><br>Možnost uložit kompletní transkripci do textového souboru (transcription.txt).<br>Možnost exportovat detekovaná čísla do souboru CSV (numbers.csv). A posléze importovat do xls.</p>
+        <p><strong>5. Načítání textového souboru</strong><br>Funkce pro načtení textu ze souboru a jeho zobrazení.<br>Automatická detekce čísel v načteném textu.</p>
+        <p><strong>6. Dynamické zpracování textu</strong><br>Transkripce zahrnuje převod číslovek na číslice (např. „jedna“ na „1“).<br>Podpora desetinných čísel s tečkou místo čárky.</p>
+        <p><strong>7. Přizpůsobení rozhraní</strong><br>Upozornění: V případě jakékoliv nutnosti editace tzn. čísla nebo textu je nutné zastavit nahrávání a data uložit a případně opětovně načíst.</p>
+    </div>
+</body>
+</html>
